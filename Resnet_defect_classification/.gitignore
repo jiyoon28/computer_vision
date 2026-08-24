@@ -1,0 +1,31 @@
+# --- Data ---
+# 원본 데이터셋: https://github.com/abin24/Magnetic-tile-defect-datasets.
+data/raw/
+data/processed/
+data/interim/
+
+# --- Models / outputs ---
+*.pt
+*.pth
+*.ckpt
+*.h5
+checkpoints/
+runs/
+outputs/
+logs/
+wandb/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
