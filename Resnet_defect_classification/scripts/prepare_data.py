@@ -7,19 +7,24 @@ from sklearn.model_selection import train_test_split
 # 1. 경로 설정
 # =========================
 
+# Resnet_defect_classification/
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+# computer_vision/  (classification / segmentation 공용 데이터 루트)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 RAW_DIR = (
-    PROJECT_ROOT
+    REPO_ROOT
     / "data"
     / "raw"
     / "magnetic_tile_dataset"
 )
 
 OUTPUT_DIR = (
-    PROJECT_ROOT
+    REPO_ROOT
     / "data"
     / "processed"
+    / "classification"
 )
 
 # =========================
@@ -44,22 +49,28 @@ DEFECT_FOLDERS = [
 samples = []
 
 # Normal
-for image_path in (
-    RAW_DIR
-    / NORMAL_FOLDER
-    / "Imgs"
-).glob("*.jpg"):
+# sorted(): glob()의 반환 순서는 파일시스템마다 달라서, 정렬하지 않으면
+# random_state=42 를 줘도 OS가 바뀌면 train/val/test split이 달라진다.
+for image_path in sorted(
+    (
+        RAW_DIR
+        / NORMAL_FOLDER
+        / "Imgs"
+    ).glob("*.jpg")
+):
     samples.append(
         (image_path, "normal")
     )
     
 # Defect
 for folder in DEFECT_FOLDERS:
-    for image_path in (
-        RAW_DIR
-        / folder
-        / "Imgs"
-    ).glob("*.jpg"):
+    for image_path in sorted(
+        (
+            RAW_DIR
+            / folder
+            / "Imgs"
+        ).glob("*.jpg")
+    ):
         
         samples.append(
             (image_path, "defect")

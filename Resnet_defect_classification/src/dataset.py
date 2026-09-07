@@ -2,12 +2,17 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+# Resnet_defect_classification/
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+# computer_vision/  (classification / segmentation 공용 데이터 루트)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 DATA_DIR = (
-    PROJECT_ROOT
+    REPO_ROOT
     / "data"
     / "processed"
+    / "classification"
 )
 
 # Iamge preprocessing

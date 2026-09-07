@@ -1,0 +1,38 @@
+# --- Data (classification / segmentation 공용) ---
+# 원본 데이터셋: https://github.com/abin24/Magnetic-tile-defect-datasets.
+# data/raw/ 는 재현성을 위해 저장소에 포함한다 (약 58MB).
+
+# processed/ 는 prepare_data.py 로 raw 에서 재생성 가능한 파생물이라 제외
+/data/interim/
+/data/processed/*
+
+# 단, segmentation 의 split 목록(CSV)은 분할을 고정하기 위해 포함
+!/data/processed/segmentation/
+/data/processed/segmentation/*
+!/data/processed/segmentation/splits/
+
+# --- Models / outputs ---
+*.pt
+*.pth
+*.ckpt
+*.h5
+checkpoints/
+runs/
+outputs/
+logs/
+wandb/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
