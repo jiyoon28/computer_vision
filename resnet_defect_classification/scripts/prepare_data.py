@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 # 1. 경로 설정
 # =========================
 
-# Resnet_defect_classification/
+# resnet_defect_classification/
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # computer_vision/  (classification / segmentation 공용 데이터 루트)
@@ -24,7 +24,7 @@ OUTPUT_DIR = (
     REPO_ROOT
     / "data"
     / "processed"
-    / "classification"
+    / "classification_by_type"
 )
 
 # =========================
@@ -47,34 +47,15 @@ DEFECT_FOLDERS = [
 # =========================
 
 samples = []
-
+class_folders = [NORMAL_FOLDER] + DEFECT_FOLDERS
 # Normal
 # sorted(): glob()의 반환 순서는 파일시스템마다 달라서, 정렬하지 않으면
 # random_state=42 를 줘도 OS가 바뀌면 train/val/test split이 달라진다.
-for image_path in sorted(
-    (
-        RAW_DIR
-        / NORMAL_FOLDER
-        / "Imgs"
-    ).glob("*.jpg")
-):
-    samples.append(
-        (image_path, "normal")
-    )
+for folder in class_folders:
+    class_name = folder.removeprefix("MT_")
     
-# Defect
-for folder in DEFECT_FOLDERS:
-    for image_path in sorted(
-        (
-            RAW_DIR
-            / folder
-            / "Imgs"
-        ).glob("*.jpg")
-    ):
-        
-        samples.append(
-            (image_path, "defect")
-        )
+    for image_path in sorted((RAW_DIR / folder / "Imgs").glob("*.jpg")):
+        samples.append((image_path, class_name))
         
 print(f"Total images: {len(samples)}")
 

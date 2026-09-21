@@ -1,8 +1,10 @@
 from pathlib import Path
+# 현재 Anaconda 환경의 OpenMP 초기화 충돌을 피하도록 NumPy를 먼저 로드.
+import numpy as np
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-# Resnet_defect_classification/
+# resnet_defect_classification/
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # computer_vision/  (classification / segmentation 공용 데이터 루트)
@@ -12,7 +14,7 @@ DATA_DIR = (
     REPO_ROOT
     / "data"
     / "processed"
-    / "classification"
+    / "classification_by_type"
 )
 
 # Iamge preprocessing
@@ -60,16 +62,23 @@ def get_dataloaders(batch_size=32):
     )
     
     val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=True 
-    )
+    val_dataset,
+    batch_size=batch_size,
+    shuffle=False,
+    )   
     
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
         shuffle=False
     )
+    
+    if not (
+    train_dataset.class_to_idx
+    == val_dataset.class_to_idx
+    == test_dataset.class_to_idx
+    ):
+        raise ValueError("train / val / test의 클래스 구성이 다릅니다.")
     
     return train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset
 

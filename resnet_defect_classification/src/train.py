@@ -1,14 +1,46 @@
 from pathlib import Path
+# 현재 Anaconda 환경의 OpenMP 초기화 충돌을 피하도록 NumPy를 먼저 로드.
+import numpy as np
+import argparse
+import random
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 from dataset import get_dataloaders # dataset.py 에서 DataLoader 생성 함수 가져오기
 from model import create_model # model.py 에서 ResNet 모델 생성 함수 가져오기
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--unfreeze-layer4", action="store_true")
+parser.add_argument("--seed", type=int, default=42)
+args = parser.parse_args()
+
+# 같은 seed로 비교하면 초기 분류층과 데이터 섞는 순서의 차이를 줄일 수 있음
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed_all(args.seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]  # 현재 train.py 기준으로 프로젝트 루트 경로 찾기
 
 MODEL_DIR = PROJECT_ROOT / "models" # 학습된 모델을 저장할 폴더 경로
 MODEL_DIR.mkdir(exist_ok=True) # models 폴더가 없으면 생성
+
+experiment = (
+    "layer4_fc"
+    if args.unfreeze_layer4
+    else "fc_only"
+)
+
+# 기존 결과인 resnet18_6class_best.pth 덮어쓰지 않고 별도 파일로 저장
+checkpoint_path = (
+    MODEL_DIR
+    / f"resnet18_6class_{experiment}_seed{args.seed}.pth"
+)
+
+print("Experiment:", experiment)
+print("Checkpoint:", checkpoint_path)
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
@@ -19,18 +51,48 @@ train_loader, val_loader, test_loader, train_dataset, val_dataset, test_dataset 
 print(train_dataset.class_to_idx) # 클래스 이름과 숫자 label 매핑 확인, 예: {'defect': 0, 'normal': 1}
 
 # Model
-model = create_model(num_classes=2, freeze_backbone=True) # 출력 class는 2개, pretrained backbone은 freeze
-model = model.to(device) # 모델의 parameter을 GPU 또는 CPU로 이동
+class_names = train_dataset.classes
+
+model = create_model(
+    num_classes=len(class_names),
+    freeze_backbone=True,
+    unfreeze_layer4=args.unfreeze_layer4,
+).to(device)
+
+print("Classes:", class_names)
+
+print("Trainable parameters:")
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        print(" ", name)
 
 # Loss
 criterion = nn.CrossEntropyLoss() # 다중 분류용 Cross Entropy Loss 사용
 
 # Optimizer
-optimizer = Adam(model.fc.parameters(), lr=1e-3) # freeze된 backbone은 제외하고 마지막 FC head만 학습
+# requires_grad=True로 바꿔도 optimizer에 넣지 않으면 업데이트되지 않음
+if args.unfreeze_layer4:
+    optimizer = Adam(
+        [
+            {
+                "params": model.layer4.parameters(),
+                "lr": 1e-4, # 이미 사전학습된 layer4는 작은 학습률로 조정
+            },
+            {
+                "params": model.fc.parameters(),
+                "lr": 1e-3, # 새로 초기화한 fc는 더 큰 학습률로 학습하도록 시작하는 설정
+            },
+        ]
+    )
+else:
+    optimizer = Adam(
+        model.fc.parameters(),
+        lr=1e-3,
+    )
 
 # Training settings
 num_epochs = 50 # 전체 training dataset을 10번 반복해서 학습
-best_val_accuracy = 0.0 # 현재까지 가장 높은 validation accuracy 저장용
+best_val_accuracy = -1.0 # 현재까지 가장 높은 validation accuracy 저장용
 
 patience = 5 # 5 epoch 동안 성능이 개선되지 않으면 학습 종료
 epochs_without_improvement = 0 # 성능이 개선되지 않은 epoch 수
@@ -39,6 +101,9 @@ for epoch in range(num_epochs):
     
     # training mode
     model.train() # 모델을 학습 모드로 전환
+    for module in model.modules():
+        if isinstance(module, nn.BatchNorm2d):
+            module.eval()
     train_loss = 0.0 # 한 epoch 동안의 loss 누적값 초기화
     train_correct = 0 # 맞게 예측한 이미지 개수 초기화
     train_total = 0 # 전체 학습 이미지 개수 초기화 
@@ -89,18 +154,30 @@ for epoch in range(num_epochs):
     # Best Model 저장
     if val_accuracy > best_val_accuracy:
         best_val_accuracy = val_accuracy
+        epochs_without_improvement = 0
+
         torch.save(
-            model.state_dict(),
-            MODEL_DIR / "resnet18_best.pth"
-        ) # 현재 모델의 weight를 파일로 저장
-        print("Best model saved.")
+            {
+                "model_state_dict": model.state_dict(),
+                "class_names": class_names,
+                "val_accuracy": val_accuracy,
+                "epoch": epoch + 1,
+                "experiment": experiment,
+                "seed": args.seed,
+                "unfreeze_layer4": args.unfreeze_layer4,
+            },
+            checkpoint_path,
+        )
         
-    else: # validation 성능이 좋아지지 않았다면
-        epochs_without_improvement += 1 # 개선 없는 epoch 수 + 1
+        print("Best model saved.")
+
+    else:
+        epochs_without_improvement += 1
         print(
             f"No improvement: "
             f"{epochs_without_improvement}/{patience}"
         )
-    if epochs_without_improvement >= patience: # patience 만큼 개선이 없으면
+
+    if epochs_without_improvement >= patience:
         print("Early stopping triggered.")
-        break # 전체 epoch 반복문 종료
+        break
