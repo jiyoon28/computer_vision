@@ -1,8 +1,10 @@
 # U-Net
 # Input -> Encoder -> Bottleneck -> Decoder <- Skip Connection -> 1x1 Conv -> Prediction Mask
+import numpy as np
 import torch
 import torch.nn as nn
 
+from config import NUM_CLASSES
 class DoubleConv(nn.Module):
     """
     U-Net에서 반복해서 사용하는 기본 블록
@@ -35,7 +37,7 @@ class DoubleConv(nn.Module):
         return self.conv(x)
     
 class UNet(nn.Module):
-    def __init__(self, in_channels=1, out_channels=1):
+    def __init__(self, in_channels=1, out_channels=NUM_CLASSES):
         super().__init__()
         
         # =========================
@@ -181,14 +183,19 @@ class UNet(nn.Module):
         return logits
     
 # 모델 Shape Test
-if __name__=="__main__":
-    model=UNet(
-        in_channels=1, out_channels=1
+if __name__ == "__main__":
+    model = UNet(
+        in_channels=1,
+        out_channels=NUM_CLASSES,
     )
-    
-    # Batch=2, Channel=1, Height=256, Width=2565
-    x=torch.randn(2,1,256,256)
-    y=model(x)
-    
-    print("Input Shape :", x.shape)
-    print("Output Shape: ", y.shape)
+    model.eval()
+
+    x = torch.randn(2, 1, 256, 256)
+
+    with torch.no_grad():
+        logits = model(x)
+        prediction = logits.argmax(dim=1)
+
+    print("Input:", x.shape)
+    print("Logits:", logits.shape)
+    print("Prediction:", prediction.shape)

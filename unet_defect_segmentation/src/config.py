@@ -1,140 +1,80 @@
 from pathlib import Path
+
+# 현재 Anaconda 환경의 OpenMP 충돌을 피하기 위한 import 순서
+import numpy as np
 import torch
 
 
-# ============================================================
-# 1. 프로젝트 경로 설정
-# ============================================================
-
-# 현재 파일:
-# unet_defect_segmentation/src/config.py
-#
-# parents[0] = src/
-# parents[1] = unet_defect_segmentation/
-# parents[2] = computer_vision/
+# 파일 위치 기준으로 경로 계산
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = PROJECT_ROOT.parent
 
-
-# repo root
-# classification / segmentation이 data/를 공유한다
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-# 공용 data/ 폴더
 DATA_DIR = REPO_ROOT / "data"
+RAW_DATA_DIR = DATA_DIR / "raw" / "magnetic_tile_dataset"
 
-
-# 원본 Magnetic Tile Dataset 위치 (두 프로젝트 공용)
-RAW_DATA_DIR = (
-    DATA_DIR
-    / "raw"
-    / "magnetic_tile_dataset"
-)
-
-
-# segmentation 전용 가공 데이터 폴더
-PROCESSED_DIR = (
-    DATA_DIR
-    / "processed"
-    / "segmentation"
-)
-
-
-# train.csv / val.csv / test.csv가 저장될 폴더
+PROCESSED_DIR = DATA_DIR / "processed" / "segmentation"
 SPLIT_DIR = PROCESSED_DIR / "splits"
-SPLIT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# 학습된 U-Net weight를 저장할 폴더
 MODEL_DIR = PROJECT_ROOT / "models"
 
-
-# 결과를 저장할 폴더
-OUTPUT_DIR = PROJECT_ROOT / "outputs"
-
-
-# U-Net이 예측한 mask를 저장할 폴더
+# 기존 이진 segmentation 결과와 구분
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "multiclass"
 PREDICTION_DIR = OUTPUT_DIR / "predictions"
-
-
-# GT vs Prediction 그림을 저장할 폴더
 VIS_DIR = OUTPUT_DIR / "visualizations"
 
-
-# ============================================================
-# 2. 필요한 폴더 자동 생성
-# ============================================================
-
-# exist_ok=True:
-# 폴더가 이미 있어도 오류를 내지 않는다.
-for directory in [
+for directory in (
     SPLIT_DIR,
     MODEL_DIR,
     OUTPUT_DIR,
     PREDICTION_DIR,
     VIS_DIR,
-]:
-    directory.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+):
+    directory.mkdir(parents=True, exist_ok=True)
 
 
-# ============================================================
-# 3. 이미지 설정
-# ============================================================
+# 픽셀 클래스 순서: 학습·평가·추론에서 동일해야 함
+CLASS_NAMES = [
+    "Background",
+    "Blowhole",
+    "Break",
+    "Crack",
+    "Fray",
+    "Uneven",
+]
 
-# 모든 이미지를 256 × 256 크기로 변경해서 학습
+NUM_CLASSES = len(CLASS_NAMES)
+
+# CSV의 defect_type을 픽셀 클래스 번호로 바꾸는 표
+DEFECT_TO_ID = {
+    name: index
+    for index, name in enumerate(CLASS_NAMES)
+    if index != 0
+}
+
+
+# 기존 U-Net은 4번 downsampling하므로 16의 배수 사용
 IMAGE_SIZE = 256
-
-
-# ============================================================
-# 4. Training Hyperparameters
-# ============================================================
-
-# 한 번에 GPU에 넣을 이미지 개수
 BATCH_SIZE = 8
 
-
-# 최대 학습 epoch
 NUM_EPOCHS = 40
-
-
-# Adam optimizer의 learning rate
 LEARNING_RATE = 1e-3
 
-
-# Validation loss가 8 epoch 동안 좋아지지 않으면
-# 학습을 조기 종료
+# validation의 foreground mIoU가 개선되지 않은 epoch 수
 EARLY_STOPPING_PATIENCE = 8
-
-
-# U-Net의 probability를 binary mask로 바꿀 기준
-#
-# probability >= 0.5 → defect
-# probability < 0.5  → background
-THRESHOLD = 0.5
-
-
-# 재현성을 위한 random seed
 SEED = 42
 
-
-# ============================================================
-# 5. Device 설정
-# ============================================================
-
-# NVIDIA GPU가 사용 가능하면 CUDA
-# 그렇지 않으면 CPU 사용
 DEVICE = torch.device(
-    "cuda"
-    if torch.cuda.is_available()
-    else "cpu"
+    "cuda" if torch.cuda.is_available() else "cpu"
 )
 
+CHECKPOINT_PATH = MODEL_DIR / "unet_multiclass_best.pth"
 
-print("====================================")
-print("Project Root :", PROJECT_ROOT)
-print("Raw Data     :", RAW_DATA_DIR)
-print("Device       :", DEVICE)
-print("====================================")
+# 시각화용 RGB 색상: 클래스 번호 순서와 대응
+PALETTE = [
+    [0, 0, 0],        # Background
+    [255, 80, 80],    # Blowhole
+    [80, 200, 80],    # Break
+    [80, 130, 255],   # Crack
+    [255, 200, 50],   # Fray
+    [200, 80, 220],   # Uneven
+]

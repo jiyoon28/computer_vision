@@ -1,60 +1,52 @@
-# dataset.py가 이미지와 ground truth mask 를 제대로 읽는지 학습 전에 눈으로 확인하는 파일
+import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
-from config import SPLIT_DIR
+import config as cfg
 from dataset import MagneticTileDataset
 
-# Train Dataset 생성
-dataset=MagneticTileDataset(
-    SPLIT_DIR/"train.csv",
-    train=False
-)
 
-# DataLoader 생성
-# batch_size=4 → 이미지 4장을 한 번에 가져옴
-# shuffle=True → 랜덤한 이미지 확인
-loader=DataLoader(
-    dataset,
-    batch_size=4,
-    shuffle=True,
-    num_workers=0
-)
+def main():
+    dataset = MagneticTileDataset(
+        cfg.SPLIT_DIR / "train.csv",
+        train=False,
+    )
 
-# 첫 번째 batch 가져오기
-batch=next(iter(loader))
+    loader = DataLoader(
+        dataset,
+        batch_size=4,
+        shuffle=True,
+        num_workers=0,
+    )
 
-images=batch["image"]
-masks=batch["mask"]
-defect_types=batch["defect_type"]
+    batch = next(iter(loader))
+    palette = np.asarray(cfg.PALETTE, dtype=np.uint8)
 
-# 결과 시각화
-plt.figure(figsize=(10,8))
+    print("Images:", batch["image"].shape)
+    print("Masks:", batch["mask"].shape)
+    print("Mask dtype:", batch["mask"].dtype)
+    print("Mask labels:", batch["mask"].unique().tolist())
 
-for i in range(len(images)):
-    # image shape:
-    # 1×256×256
-    # squeeze() → 256×256
-    image=images[i].squeeze().numpy()
+    fig, axes = plt.subplots(
+        len(batch["image"]), 2, figsize=(9, 10)
+    )
 
-    # dataset.py에서 -1~1로 Normalize했기 때문에
-    # 다시 0~1 범위로 복원해서 화면에 표시
-    image=image*0.5+0.5
+    for i in range(len(batch["image"])):
+        image = batch["image"][i, 0].numpy() * 0.5 + 0.5
+        mask = batch["mask"][i].numpy()
 
-    # Ground Truth Mask
-    mask=masks[i].squeeze().numpy()
+        axes[i, 0].imshow(image, cmap="gray", vmin=0, vmax=1)
+        axes[i, 0].set_title(batch["defect_type"][i])
 
-    # 왼쪽: Original Image
-    plt.subplot(len(images),2,i*2+1)
-    plt.imshow(image,cmap="gray")
-    plt.title(f"Image - {defect_types[i]}")
-    plt.axis("off")
+        axes[i, 1].imshow(palette[mask])
+        axes[i, 1].set_title("Ground Truth")
 
-    # 오른쪽: Ground Truth Mask
-    plt.subplot(len(images),2,i*2+2)
-    plt.imshow(mask,cmap="gray")
-    plt.title("Ground Truth Mask")
-    plt.axis("off")
+        axes[i, 0].axis("off")
+        axes[i, 1].axis("off")
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()

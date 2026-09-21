@@ -1,117 +1,115 @@
 import random
 
 import numpy as np
-import pandas as pd
 import torch
-
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 from torchvision.transforms import InterpolationMode
 
-from config import IMAGE_SIZE
+from config import IMAGE_SIZE, DEFECT_TO_ID
 from splits import read_csv
 
-class MagneticTileDataset(Dataset):
-    def __init__(self, csv_path, train=False):
-        """
-        csv_path:
-            prepare_data.py에서 만든 train.csv / val.csv / test.csv 경로
 
-        train:
-            True  -> 학습 데이터, augmentation 적용
-            False -> validation/test, augmentation 적용 안 함
-        """
-        # CSV에는 REPO_ROOT 기준 상대경로가 저장되어 있다.
-        # read_csv()가 절대경로로 복원해 주므로
-        # 어느 위치에서 실행해도 파일을 찾을 수 있다.
+class MagneticTileDataset(Dataset):
+    def __init__(self, csv_path, train=False, image_size=IMAGE_SIZE):
+        # 기존 splits.py가 CSV의 상대경로를 절대경로로 복원
         self.df = read_csv(csv_path)
         self.train = train
+        self.image_size = image_size
+
+        if self.df.empty:
+            raise ValueError(f"빈 데이터셋입니다: {csv_path}")
+
+        # 오타나 예상하지 않은 결함 종류를 조기에 확인
+        allowed_types = set(DEFECT_TO_ID) | {"Free"}
+        unknown = set(self.df["defect_type"]) - allowed_types
+
+        if unknown:
+            raise ValueError(f"알 수 없는 결함 종류: {unknown}")
 
     def __len__(self):
-        """Dataset 전체 이미지 개수를 반환."""
         return len(self.df)
 
     def __getitem__(self, idx):
-        """
-        idx번째 이미지와 Ground Truth Mask를 읽어서 반환한다.
-        """
-
-        # 1. CSV에서 idx번째 이미지 정보 가져오기
         row = self.df.iloc[idx]
 
         image_path = row["image_path"]
         mask_path = row["mask_path"]
         defect_type = row["defect_type"]
         is_defect = int(row["is_defect"])
-        
-        # 2. 원본 이미지 읽기
-        # Magnetic Tile은 grayscale이므로 1채널("L")로 읽음
-        image = Image.open(image_path).convert("L")
-        
-        # 3. Ground Truth Mask 읽기
-        if is_defect == 1 and not pd.isna(mask_path) and str(mask_path) != "":
-            # Defect 이미지라면 실제 mask 파일을 읽음
-            mask = Image.open(str(mask_path)).convert("L")
+
+        # 영상은 grayscale 1채널로 읽기
+        with Image.open(image_path) as src:
+            image = src.convert("L")
+
+        # 정상 여부와 결함 종류 정보가 일치하는지 확인
+        if is_defect != int(defect_type != "Free"):
+            raise ValueError(f"라벨 정보가 일치하지 않습니다: {image_path}")
+
+        if is_defect:
+            if not mask_path:
+                raise ValueError(f"결함 마스크가 없습니다: {image_path}")
+
+            with Image.open(mask_path) as src:
+                mask = src.convert("L")
+
+            if mask.size != image.size:
+                raise ValueError(f"이미지와 마스크 크기가 다릅니다: {image_path}")
         else:
-            #  Normal(free) 이미지라면 defect가 없으므로 모든 픽셀이 0인 mask를 만든다
+            # 정상 이미지는 모든 픽셀이 배경
             mask = Image.new("L", image.size, color=0)
-            
-        # 4. Image와 Mask 크기를 동일하게 256x256으로 맞춤
-        # Image는 일반적인 이미지이므로 bilinear interpolation 사용 
+
+        size = [self.image_size, self.image_size]
+
+        # 이미지에는 bilinear 보간
         image = TF.resize(
-            image, [IMAGE_SIZE, IMAGE_SIZE], interpolation=InterpolationMode.BILINEAR
+            image,
+            size,
+            interpolation=InterpolationMode.BILINEAR,
         )
-        
-        # Mask는 class label 이므로 반드시 nearest interpolation 사용
-        # Bilinear를 쓰면 0과 255 사이의 애매한 값 생길수도 있음
+
+        # 마스크에는 nearest 보간: 클래스 경계를 섞지 않음
         mask = TF.resize(
-            mask, [IMAGE_SIZE, IMAGE_SIZE], interpolation=InterpolationMode.NEAREST
+            mask,
+            size,
+            interpolation=InterpolationMode.NEAREST,
         )
-        
-        # 5. Data Augmentation
-        # 학습데이터에만 적용함
-        if self.train: 
-            # 50% 확률로 좌우 반전
+
+        # 학습 때만 증강
+        # 이미지와 정답 마스크를 반드시 같은 방향으로 변환
+        if self.train:
             if random.random() < 0.5:
                 image = TF.hflip(image)
                 mask = TF.hflip(mask)
-                
-            # 50% 확률로 상하 반전
+
             if random.random() < 0.5:
                 image = TF.vflip(image)
                 mask = TF.vflip(mask)
-                
-        # 6. Image를 Tensor로 변환 
-        # PIL Image: HxW 0~255
-        # Tensor: 1xHxW, 0~1
+
+        # [1, H, W], float32
         image = TF.to_tensor(image)
-        
-        # Image normalization
-        # 0~1 범위를 대략 -1~1 범위로 변경
-        image = TF.normalize(
-            image, mean=[0.5], std=[0.5]
-        )
-        
-        # 7. Mask를 Binary Tensor로 변환
-        mask = np.array(mask)
-        
-        # mask가 0/255 형태라고 가정 127보다 크면 defect=1 아니면 background=0
-        mask = (mask > 127).astype(np.float32)
-        
-        # numpy -> PyTorch Tensor
-        mask = torch.from_numpy(mask)
-        
-        # HxW -> 1xHxW
-        # U-Net output과 shape을 맞추기 위해 channel 차원 추가
-        mask = mask.unsqueeze(0)
-        
-        # 8. 필요한 데이터 반환
+        image = TF.normalize(image, mean=[0.5], std=[0.5])
+
+        # 원본 마스크: 배경 0 / 결함 255
+        binary_mask = np.asarray(mask) > 127
+
+        # 정답: 배경 0 / 해당 결함의 클래스 번호 1~5
+        target = np.zeros(binary_mask.shape, dtype=np.int64)
+
+        if is_defect:
+            class_id = DEFECT_TO_ID[defect_type]
+            target[binary_mask] = class_id
+
+        # CrossEntropyLoss의 정답은 [H, W], torch.long
+        # 기존 이진 코드와 달리 unsqueeze(0)를 하지 않음!
+        target = torch.from_numpy(target)
+
         return {
             "image": image,
-            "mask": mask,
+            "mask": target,
             "image_path": str(image_path),
-            "mask_path": "" if pd.isna(mask_path) else str(mask_path),
+            "mask_path": str(mask_path),
             "defect_type": defect_type,
-            "is_defect": is_defect
+            "is_defect": is_defect,
         }
