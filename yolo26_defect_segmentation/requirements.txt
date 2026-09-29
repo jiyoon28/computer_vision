@@ -1,0 +1,5 @@
+# semantic task / result.semantic_mask API가 포함된 버전
+ultralytics==8.4.164
+numpy>=1.23
+Pillow>=9.1
+PyYAML>=6.0

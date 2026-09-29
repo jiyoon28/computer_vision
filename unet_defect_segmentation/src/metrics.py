@@ -21,6 +21,7 @@ def update_confusion_matrix(matrix, predictions, targets):
     # 정답과 예측 조합을 하나의 정수로 표현
     indices = true * num_classes + pred
 
+    # torch.bincount: 각 숫자가 몇 번 등장했는지 셈
     counts = torch.bincount(
         indices,
         minlength=num_classes * num_classes,

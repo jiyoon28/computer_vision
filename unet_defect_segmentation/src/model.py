@@ -23,9 +23,10 @@ class DoubleConv(nn.Module):
     
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        
+        # 여러 layer 을 순서대로 실행
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            # 각 feature map의 값 분포를 정규화해서 학습을 더 안정적으로 만들어줌
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
@@ -37,6 +38,8 @@ class DoubleConv(nn.Module):
         return self.conv(x)
     
 class UNet(nn.Module):
+    # 기본적으로 in_channels=1 -> 앞에서 이미지를 src.convert("L") grayscale로 읽었기 때문
+    # 최종 출력 channel은 클래스 개수
     def __init__(self, in_channels=1, out_channels=NUM_CLASSES):
         super().__init__()
         
@@ -46,7 +49,7 @@ class UNet(nn.Module):
         
         # 1x256x256 -> 32x256x256
         self.enc1=DoubleConv(in_channels, 32)
-        self.pool1=nn.MaxPool2d(2)
+        self.pool1=nn.MaxPool2d(2) # 2x2 max pooling -> 가로와 세로 절반으로 줄어듦
         
         # 32x128x128 -> 64x128x128
         self.enc2=DoubleConv(32,64)
@@ -99,8 +102,8 @@ class UNet(nn.Module):
         # Final 1x1 Conv
         # =========================
         
-        # 각 Pixel 마다 존재하는 32개의 feature을 defect score 1개로 변환
-        # 32x256x256 -> 1x256x256
+        # 각 Pixel 마다 존재하는 32개의 feature을 NUM_CLASSES.개의 class score(logit)로 변환
+        # 32x256x256 -> NUM_CLASSES x256x256
         self.final=nn.Conv2d(32, out_channels, kernel_size=1)
         
     def forward(self,x):
@@ -193,8 +196,9 @@ if __name__ == "__main__":
     x = torch.randn(2, 1, 256, 256)
 
     with torch.no_grad():
+        # input[2,1,256,256] -> U-Net -> logits[2,6,256,256]
         logits = model(x)
-        prediction = logits.argmax(dim=1)
+        prediction = logits.argmax(dim=1) #  가장 큰 값의 위치를 찾음 ex) Crack = class 3
 
     print("Input:", x.shape)
     print("Logits:", logits.shape)

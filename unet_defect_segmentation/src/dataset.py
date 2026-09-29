@@ -113,7 +113,8 @@ class MagneticTileDataset(Dataset):
         # CrossEntropyLoss의 정답은 [H, W], torch.long
         # 기존 이진 코드와 달리 unsqueeze(0)를 하지 않음!
         target = torch.from_numpy(target)
-
+        
+        # 하나의 sample dictionary로 반환
         return {
             "image": image,
             "mask": target,

@@ -100,7 +100,7 @@ def main():
         num_workers=0,
     )
 
-    # 自作 U-Net: 사전학습 가중치 없이 처음부터 학습
+    # U-Net: 사전학습 가중치 없이 처음부터 학습
     model = UNet(
         in_channels=1,
         out_channels=cfg.NUM_CLASSES,

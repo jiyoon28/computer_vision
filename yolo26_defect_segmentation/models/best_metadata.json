@@ -1,0 +1,34 @@
+{
+  "source_checkpoint": "C:\\Users\\JYMOON\\Project\\practice\\computer_vision\\yolo26_defect_segmentation\\runs\\yolo26n_sem_384_crackaug_e150\\weights\\best.pt",
+  "data_yaml": "C:\\Users\\JYMOON\\Project\\practice\\computer_vision\\data\\processed\\yolo26_semantic_384_crackaug\\dataset.yaml",
+  "dataset": {
+    "image_size": 384,
+    "class_names": [
+      "Background",
+      "Blowhole",
+      "Break",
+      "Crack",
+      "Fray",
+      "Uneven"
+    ],
+    "split_sha256": {
+      "train": "69b628a8e8866c3505439e93817445d02bea15a5f7b8e2d45b09402c4a9ca387",
+      "val": "91ba22becc8407b7eacf22111164114490325117ec5eaedf4c03062be95c288b",
+      "test": "257a5754f6c3666dc8526fad22af935550a34c67792b47c2dce28bda67acfa3e"
+    },
+    "counts": {
+      "train": 608,
+      "val": 118,
+      "test": 118
+    },
+    "crack_injection": {
+      "source": "C:\\Users\\JYMOON\\Project\\practice\\computer_vision\\data\\processed\\yolo26_semantic_384",
+      "count": 60,
+      "seed": 42,
+      "methods": {
+        "cutpaste": 32,
+        "poisson": 28
+      }
+    }
+  }
+}

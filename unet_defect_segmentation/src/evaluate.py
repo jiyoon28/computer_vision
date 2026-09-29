@@ -13,6 +13,7 @@ from train import run_epoch
 
 
 def main():
+    # 학습 중 저장했던 체크포인트 불러옴
     checkpoint = torch.load(
         cfg.CHECKPOINT_PATH,
         map_location="cpu",
@@ -20,12 +21,13 @@ def main():
     )
 
     # 클래스 순서가 달라지면 같은 숫자도 의미가 달라짐
+    # 체크포인트를 저장할 당시 클래스 순서와 현재 설정의 클래스 순서가 같은지 확인함
     if checkpoint["class_names"] != cfg.CLASS_NAMES:
         raise ValueError("체크포인트와 현재 클래스 순서가 다릅니다.")
 
     test_dataset = MagneticTileDataset(
         cfg.SPLIT_DIR / "test.csv",
-        train=False,
+        train=False, # test dataset에서는 augmentation 사용하지 않음
         image_size=checkpoint["image_size"],
     )
     test_loader = DataLoader(
@@ -40,6 +42,7 @@ def main():
         out_channels=cfg.NUM_CLASSES,
     ).to(cfg.DEVICE)
 
+    # 학습된 weight 불러오기
     model.load_state_dict(checkpoint["model_state_dict"])
 
     # 전체 test 픽셀에 대해 점수 계산
@@ -72,15 +75,19 @@ def main():
         for batch in test_loader:
             images = batch["image"].to(cfg.DEVICE)
             predictions = model(images).argmax(dim=1).cpu().numpy()
+            # ground true make를 numpy array 로 바꿈
             targets = batch["mask"].numpy()
 
             # 입력 정규화를 되돌려 0~255 grayscale로 복원
+            # [B,1,H,W] -> channel 0만 가져옴 -> [B,H,W]
+            # clip(0,1): 계산 오차 등으로 범위를 벗어난 값을 0~1 사이로 제한 -> *255 -> 이미지 저장용으로 0~1 -> 0~255로 바꿈
             originals = (
                 (batch["image"][:, 0].numpy() * 0.5 + 0.5)
                 .clip(0, 1) * 255
             ).astype(np.uint8)
 
             for i, image_path in enumerate(batch["image_path"]):
+                # 문자열 경로를 path 객체로 바꿈 
                 path = Path(image_path)
 
                 # 서로 다른 원본 클래스 폴더의 파일명 충돌 방지
