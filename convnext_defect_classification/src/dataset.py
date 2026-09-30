@@ -55,12 +55,14 @@ def build_transforms(image_size):
     return train_transform, eval_transform
 
 
-def get_datasets(image_size=384):
+def get_datasets(image_size=384, data_dir=DATA_DIR):
+    # data_dir: YOLO와 같은 분할로 학습할 때는 classification_seg_split을 넘김
+    data_dir = Path(data_dir)
     train_transform, eval_transform = build_transforms(image_size)
 
-    train_dataset = datasets.ImageFolder(DATA_DIR / "train", transform=train_transform)
-    val_dataset = datasets.ImageFolder(DATA_DIR / "val", transform=eval_transform)
-    test_dataset = datasets.ImageFolder(DATA_DIR / "test", transform=eval_transform)
+    train_dataset = datasets.ImageFolder(data_dir / "train", transform=train_transform)
+    val_dataset = datasets.ImageFolder(data_dir / "val", transform=eval_transform)
+    test_dataset = datasets.ImageFolder(data_dir / "test", transform=eval_transform)
 
     if not (
         train_dataset.class_to_idx
@@ -72,8 +74,8 @@ def get_datasets(image_size=384):
     return train_dataset, val_dataset, test_dataset
 
 
-def get_dataloaders(image_size=384, batch_size=16, num_workers=4, seed=42):
-    train_dataset, val_dataset, test_dataset = get_datasets(image_size)
+def get_dataloaders(image_size=384, batch_size=16, num_workers=4, seed=42, data_dir=DATA_DIR):
+    train_dataset, val_dataset, test_dataset = get_datasets(image_size, data_dir)
 
     # seed를 고정한 generator로 섞는 순서를 재현 가능하게 만듦
     generator = torch.Generator()

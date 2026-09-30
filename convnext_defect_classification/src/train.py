@@ -9,7 +9,7 @@ import time
 import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score, recall_score
-from dataset import get_dataloaders
+from dataset import DATA_DIR, get_dataloaders
 from model import DEFAULT_MODEL_NAME, create_model, split_param_groups
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +34,10 @@ def parse_args():
     parser.add_argument(
         "--class-weight", choices=["none", "sqrt", "inverse"], default="sqrt",
         help="클래스 불균형 보정. sqrt는 역빈도의 제곱근",
+    )
+    parser.add_argument(
+        "--data-dir", type=Path, default=DATA_DIR,
+        help="ImageFolder 루트. YOLO와 같은 분할은 data/processed/classification_seg_split",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--workers", type=int, default=4)
@@ -141,8 +145,9 @@ def main():
 
     train_loader, val_loader, _, train_dataset, val_dataset, _ = get_dataloaders(
         image_size=args.image_size, batch_size=args.batch,
-        num_workers=args.workers, seed=args.seed,
+        num_workers=args.workers, seed=args.seed, data_dir=args.data_dir,
     )
+    print("Data:", args.data_dir)
     class_names = train_dataset.classes
     print("Classes:", train_dataset.class_to_idx)
     print("Train / Val:", len(train_dataset), len(val_dataset))
