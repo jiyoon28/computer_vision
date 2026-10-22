@@ -143,10 +143,8 @@ def main():
             model.head.load_state_dict(checkpoint["head_state_dict"])
         else:
             # pretrained=False: all weights come from the checkpoint, no download needed.
-            model = convnext_model_module.create_model(
-                num_classes=len(classes), model_name=checkpoint["model_name"], pretrained=False,
-            )
-            model.load_state_dict(checkpoint["model_state_dict"])
+            # Rebuilds pooling/head settings stored in the checkpoint.
+            model = convnext_model_module.model_from_checkpoint(checkpoint)
         metrics, predictions[name] = evaluate(model, dataset, device)
         metrics["checkpoint"] = str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
         metrics["selected_epoch"] = checkpoint.get("epoch")

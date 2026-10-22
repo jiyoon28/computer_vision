@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score, recall_score
 from dataset import DATA_DIR, get_dataloaders
-from model import DEFAULT_MODEL_NAME, create_model, split_param_groups
+from model import DEFAULT_MODEL_NAME, HEAD_TYPES, create_model, split_param_groups
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = PROJECT_ROOT / "models"
@@ -22,6 +22,8 @@ NORMAL_CLASS = "Free"  # 정상 클래스 이름. 결함 검출률(defect recall
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
+    parser.add_argument("--global-pool", default="avg", choices=["avg", "max", "avgmax"])
+    parser.add_argument("--head-type", default="linear", choices=HEAD_TYPES)
     parser.add_argument("--image-size", type=int, default=384)
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch", type=int, default=16)
@@ -156,7 +158,11 @@ def main():
     print("Train counts:", dict(zip(class_names, counts.astype(int).tolist())))
     print("Class weights:", dict(zip(class_names, [round(w, 2) for w in class_weights.tolist()])))
 
-    model = create_model(num_classes=len(class_names), model_name=args.model_name).to(device)
+    model = create_model(
+        num_classes=len(class_names), model_name=args.model_name,
+        global_pool=args.global_pool, head_type=args.head_type,
+    ).to(device)
+    print("Head:", model.head)
     print("Parameters:", sum(p.numel() for p in model.parameters()))
 
     criterion = nn.CrossEntropyLoss(
@@ -235,6 +241,8 @@ def main():
                     "model_state_dict": model.state_dict(),
                     "class_names": class_names,
                     "model_name": args.model_name,
+                    "global_pool": args.global_pool,
+                    "head_type": args.head_type,
                     "image_size": args.image_size,
                     "epoch": epoch + 1,
                     "val_accuracy": val["accuracy"],

@@ -22,7 +22,7 @@ YOLO_SRC = REPO_ROOT / "yolo26_defect_segmentation" / "src"
 sys.path[:0] = [str(CONVNEXT_SRC), str(YOLO_SRC)]
 
 from dataset import build_transforms  # noqa: E402  (ConvNeXt)
-from model import create_model  # noqa: E402  (ConvNeXt)
+from model import model_from_checkpoint  # noqa: E402  (ConvNeXt)
 from inference import load_model, predict_mask  # noqa: E402  (YOLO)
 from prepare_data import convert_sample  # noqa: E402  (YOLO)
 
@@ -62,12 +62,8 @@ def parse_args():
 
 def load_convnext(weights, device):
     checkpoint = torch.load(weights, map_location="cpu", weights_only=False)
-    model = create_model(
-        num_classes=len(checkpoint["class_names"]),
-        model_name=checkpoint["model_name"],
-        pretrained=False,  # 가중치는 체크포인트에서 불러오므로 다운로드 불필요
-    )
-    model.load_state_dict(checkpoint["model_state_dict"])
+    # pooling/head 설정까지 체크포인트에서 읽어 같은 구조로 만든다
+    model = model_from_checkpoint(checkpoint)
     model.to(device).eval()
     _, eval_transform = build_transforms(checkpoint["image_size"])
     return model, eval_transform, checkpoint["class_names"]
