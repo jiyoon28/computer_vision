@@ -39,13 +39,11 @@ data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp3_num_53038.jpg,data/raw/magnetic
 data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp6_num_317592.jpg,data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp6_num_317592.png,Blowhole,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_165425.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_165425.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_114433.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_114433.png,Free,0
-data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp3_num_853.jpg,data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp3_num_853.png,Blowhole,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_69864.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_69864.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Break/Imgs/exp5_num_304345.jpg,data/raw/magnetic_tile_dataset/MT_Break/Imgs/exp5_num_304345.png,Break,1
 data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp6_num_54366.jpg,data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp6_num_54366.png,Blowhole,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_7935.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_7935.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp4_num_3724.jpg,data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp4_num_3724.png,Blowhole,1
-data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_346332.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_346332.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp3_num_316726.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp3_num_316726.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp6_num_77744.jpg,data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp6_num_77744.png,Fray,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_292109.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_292109.png,Free,0
@@ -94,7 +92,6 @@ data/raw/magnetic_tile_dataset/MT_Uneven/Imgs/exp2_num_28359.jpg,data/raw/magnet
 data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp4_num_322656.jpg,data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp4_num_322656.png,Blowhole,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_308849.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_308849.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp4_num_135615.jpg,data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp4_num_135615.png,Fray,1
-data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp1_num_331149.jpg,data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp1_num_331149.png,Fray,1
 data/raw/magnetic_tile_dataset/MT_Crack/Imgs/exp2_num_339841.jpg,data/raw/magnetic_tile_dataset/MT_Crack/Imgs/exp2_num_339841.png,Crack,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_68382.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_68382.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_354402.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_354402.png,Free,0

@@ -8,7 +8,11 @@ from config import (
     SEED,
 )
 
-from splits import save_split
+from splits import save_split, to_relative
+
+
+# 라벨이 애매해서 학습/평가에서 빼는 이미지 목록 (이유는 파일 안에 기록)
+EXCLUDED_CSV = SPLIT_DIR / "excluded.csv"
 
 
 # ============================================================
@@ -227,6 +231,23 @@ def split_dataset(df):
 # 4. Main
 # ============================================================
 
+def drop_excluded(df):
+
+    if not EXCLUDED_CSV.exists():
+        return df
+
+    excluded = set(
+        pd.read_csv(EXCLUDED_CSV)["image_path"]
+    )
+
+    # df의 image_path는 절대경로, 목록은 REPO_ROOT 기준 상대경로
+    keep = ~df["image_path"].map(to_relative).isin(excluded)
+
+    print(f"Excluded: {(~keep).sum()} images")
+
+    return df[keep]
+
+
 def main():
 
     # --------------------------------
@@ -270,6 +291,18 @@ def main():
     train_df, val_df, test_df = (
         split_dataset(df)
     )
+
+
+    # --------------------------------
+    # 애매한 이미지 제외
+    # --------------------------------
+
+    # 나누기 "전"에 빼면 무작위 샘플링/분할 결과가 통째로 바뀌어서
+    # 이미 학습한 모델과 split이 달라진다.
+    # 나눈 "뒤"에 빼야 기존 split에서 해당 이미지만 빠진다.
+    train_df = drop_excluded(train_df)
+    val_df = drop_excluded(val_df)
+    test_df = drop_excluded(test_df)
 
 
     # --------------------------------

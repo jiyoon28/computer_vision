@@ -1,0 +1,10 @@
+image_path,reason
+data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp0_num_797.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_824.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_834.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Blowhole/Imgs/exp3_num_853.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_889.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_937.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp6_num_972.jpg,same tile shot under 7 lighting levels (exp0-6); labels disagree (Fray 2 / Blowhole 1 / Free 4)
+data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp1_num_331149.jpg,ambiguous label: faint mark at top-left edge that every model reads as normal
+data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp2_num_346332.jpg,ambiguous label: labeled Free but has a visible dark spot and streak near the top

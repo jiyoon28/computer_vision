@@ -11,7 +11,6 @@ data/raw/magnetic_tile_dataset/MT_Uneven/Imgs/exp6_num_25007.jpg,data/raw/magnet
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_344604.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_344604.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp3_num_260963.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp3_num_260963.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp6_num_157298.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp6_num_157298.png,Free,0
-data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp6_num_972.jpg,data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp6_num_972.png,Fray,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_195700.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp4_num_195700.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Uneven/Imgs/exp1_num_524.jpg,data/raw/magnetic_tile_dataset/MT_Uneven/Imgs/exp1_num_524.png,Uneven,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_61310.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_61310.png,Free,0
@@ -34,7 +33,6 @@ data/raw/magnetic_tile_dataset/MT_Break/Imgs/exp3_num_194220.jpg,data/raw/magnet
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp6_num_31184.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp6_num_31184.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_293709.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_293709.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Break/Imgs/exp4_num_105851.jpg,data/raw/magnetic_tile_dataset/MT_Break/Imgs/exp4_num_105851.png,Break,1
-data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp0_num_797.jpg,data/raw/magnetic_tile_dataset/MT_Fray/Imgs/exp0_num_797.png,Fray,1
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_110086.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp1_num_110086.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_75157.jpg,data/raw/magnetic_tile_dataset/MT_Free/Imgs/exp5_num_75157.png,Free,0
 data/raw/magnetic_tile_dataset/MT_Crack/Imgs/exp1_num_339819.jpg,data/raw/magnetic_tile_dataset/MT_Crack/Imgs/exp1_num_339819.png,Crack,1
