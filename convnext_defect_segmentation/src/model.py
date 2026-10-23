@@ -9,12 +9,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DECODERS = ["unet", "unet4", "fpn", "upernet"]
+DECODERS = ["unet", "unet4", "fpn", "upernet", "segformer"]
 DEFAULT_MODEL_NAME = "convnextv2_tiny.fcmae_ft_in22k_in1k_384"
+# ImageNet pretrained backbone이 기대하는 입력 분포로 이미지를 정규화하기 위한 평균과 표준편차
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
-
+# 공통 Conv 블록 Conv -> BatchNorm -> ReLU
 def conv_bn_relu(in_channels, out_channels, kernel_size=3):
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel_size, padding=kernel_size // 2, bias=False),
@@ -22,7 +23,9 @@ def conv_bn_relu(in_channels, out_channels, kernel_size=3):
         nn.ReLU(inplace=True),
     )
 
-
+# X를 ref와 동일한 가로, 세로 크기로 키우는 함수
+# 새로운 값을 학습해서 만드는게 아니라 주변 픽셀 값들을 이용해서 중간 값을 계산
+# 2차원 이미지에서는 가로와 세로 방향을 동시에 고려하는게 bilinear interpolation
 def upsample_like(x, ref):
     return F.interpolate(x, size=ref.shape[-2:], mode="bilinear", align_corners=False)
 
@@ -37,14 +40,15 @@ class ConvNeXtEncoder(nn.Module):
     def __init__(self, model_name=DEFAULT_MODEL_NAME, pretrained=True, drop_path_rate=0.1):
         super().__init__()
         # drop_path_rate 0.1: 분류 학습과 같은 값 (데이터가 적어서 켜둠)
+        # timm에서 pre-trained weight 불러와서 convnext v2 전체 모델 생성
         backbone = timm.create_model(model_name, pretrained=pretrained, drop_path_rate=drop_path_rate)
-        self.stem = backbone.stem
-        self.stages = backbone.stages
-        self.channels = [info["num_chs"] for info in backbone.feature_info]
+        self.stem = backbone.stem # 입력을 처음부터 1/4 해상도로 줄이고 feature로 변환
+        self.stages = backbone.stages # feature extraction stage 4개를 불러옴
+        self.channels = [info["num_chs"] for info in backbone.feature_info] # 각 stage의 channel 수를 저장함 tiny면 대략 [96,192,384,768]
 
     def forward(self, x):
-        features = []
-        x = self.stem(x)
+        features = [] # 각 stage feature를 저장할 리스트
+        x = self.stem(x) # 입력을 stem에 통과
         for stage in self.stages:
             x = stage(x)
             features.append(x)
@@ -193,11 +197,36 @@ class UPerNetDecoder(nn.Module):
         return self.classifier(self.dropout(self.fuse(torch.cat(outs, dim=1))))
 
 
+# ============================================================
+# Decoder 4. SegFormer All-MLP decoder (Xie et al. 2021)
+# ============================================================
+
+class SegFormerDecoder(nn.Module):
+    """네 level을 각각 같은 채널로 맞추고(1x1 = 픽셀별 Linear), 1/4로 키워 이어붙인 뒤 1x1로 합쳐 분류.
+
+    3x3 conv가 하나도 없는 가장 가벼운 decoder. 출력은 1/4 해상도이고 SegModel이 4배로 키운다.
+    256 채널, dropout 0.1은 SegFormer B0/B1 설정 (B2 이상은 768). 가벼운 decoder로 충분한지 보려고 작은 쪽을 씀.
+    """
+
+    def __init__(self, encoder_channels, num_classes, channels=256, dropout=0.1):
+        super().__init__()
+        self.linear = nn.ModuleList(nn.Conv2d(c, channels, 1) for c in encoder_channels)
+        self.fuse = conv_bn_relu(len(encoder_channels) * channels, channels, kernel_size=1)
+        self.dropout = nn.Dropout2d(dropout)
+        self.classifier = nn.Conv2d(channels, num_classes, 1)
+
+    def forward(self, features, image):
+        target = features[0]
+        outs = [upsample_like(linear(f), target) for linear, f in zip(self.linear, features)]
+        return self.classifier(self.dropout(self.fuse(torch.cat(outs, dim=1))))
+
+
 DECODER_CLASSES = {
     "unet": UNetDecoder,
     "unet4": lambda channels, num_classes: UNetDecoder(channels, num_classes, full_res=False),
     "fpn": FPNDecoder,
     "upernet": UPerNetDecoder,
+    "segformer": SegFormerDecoder,
 }
 
 
@@ -211,6 +240,7 @@ class SegModel(nn.Module):
         super().__init__()
         self.encoder = ConvNeXtEncoder(model_name, pretrained=pretrained)
         self.decoder = DECODER_CLASSES[decoder](self.encoder.channels, num_classes)
+        self.model_name = model_name
         self.register_buffer("mean", torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1), persistent=False)
         self.register_buffer("std", torch.tensor(IMAGENET_STD).view(1, 3, 1, 1), persistent=False)
 
@@ -225,10 +255,58 @@ class SegModel(nn.Module):
         return logits
 
 
+# ============================================================
+# SegFormer 전체 모델 (MiT encoder + All-MLP decoder). ConvNeXt encoder와 비교용
+# ============================================================
+
+# 이름 -> Hugging Face 사전학습 encoder. mit-b2(약 25M)가 ConvNeXt-T(약 28M)와 크기가 비슷함
+SEGFORMER_MODELS = {"segformer_b2": "nvidia/mit-b2"}
+
+
+class SegFormerModel(nn.Module):
+    """transformers의 SegFormer를 SegModel과 같은 입출력으로 감싼다.
+
+    입력: [B, 3, H, W] 0~1 RGB / 출력: [B, num_classes, H, W] logits.
+    encoder/decoder 속성을 맞춰 두어 split_param_groups(학습률 분리)를 그대로 쓴다.
+    decoder 768 채널: SegFormer 논문의 B2 설정 그대로.
+    """
+
+    def __init__(self, hub_name, num_classes, pretrained=True):
+        super().__init__()
+        # transformers는 이 모델을 쓸 때만 필요하므로 여기서 import
+        from transformers import SegformerConfig, SegformerForSemanticSegmentation
+
+        kwargs = {"num_labels": num_classes, "decoder_hidden_size": 768}
+        if pretrained:
+            # mit-b2는 ImageNet 분류 체크포인트라 encoder만 불러오고 decode head는 새로 만든다
+            net = SegformerForSemanticSegmentation.from_pretrained(hub_name, **kwargs)
+        else:
+            net = SegformerForSemanticSegmentation(SegformerConfig.from_pretrained(hub_name, **kwargs))
+        self.net = net
+        self.encoder = net.segformer
+        self.decoder = net.decode_head
+        self.model_name = hub_name
+        self.register_buffer("mean", torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1), persistent=False)
+        self.register_buffer("std", torch.tensor(IMAGENET_STD).view(1, 3, 1, 1), persistent=False)
+
+    def forward(self, x):
+        if x.shape[-1] % 32 or x.shape[-2] % 32:
+            raise ValueError(f"입력 크기는 32의 배수여야 합니다: {tuple(x.shape[-2:])}")
+        logits = self.net(pixel_values=(x - self.mean) / self.std).logits  # 1/4 해상도
+        return upsample_like(logits, x)
+
+
 def create_model(decoder, num_classes, model_name=DEFAULT_MODEL_NAME, pretrained=True, init_checkpoint=None):
-    """init_checkpoint: 결함 분류 ConvNeXt 체크포인트. 주면 encoder를 그 가중치로 덮어쓴다."""
+    """init_checkpoint: 결함 분류 ConvNeXt 체크포인트. 주면 encoder를 그 가중치로 덮어쓴다.
+
+    decoder가 SEGFORMER_MODELS의 이름이면 ConvNeXt 대신 SegFormer 전체 모델을 만든다 (model_name 무시).
+    """
+    if decoder in SEGFORMER_MODELS:
+        if init_checkpoint is not None:
+            raise ValueError("분류 체크포인트 초기화(--init clf)는 ConvNeXt encoder에서만 가능합니다.")
+        return SegFormerModel(SEGFORMER_MODELS[decoder], num_classes, pretrained=pretrained)
     if decoder not in DECODERS:
-        raise ValueError(f"decoder must be one of {DECODERS}: {decoder}")
+        raise ValueError(f"decoder must be one of {DECODERS + list(SEGFORMER_MODELS)}: {decoder}")
     model = SegModel(decoder, num_classes, model_name, pretrained=pretrained and init_checkpoint is None)
     if init_checkpoint is not None:
         checkpoint = torch.load(init_checkpoint, map_location="cpu", weights_only=False)

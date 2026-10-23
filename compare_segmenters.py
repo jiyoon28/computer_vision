@@ -142,7 +142,10 @@ def main():
     for path in args.convnext:
         checkpoint = torch.load(path, map_location="cpu", weights_only=False)
         # seed in the name so runs that differ only by seed do not overwrite each other
-        predictors[f"ConvNeXt-{checkpoint['decoder']}({checkpoint['init']}, s{checkpoint['args']['seed']})"] = (
+        # "segformer_b2" etc. = full SegFormer (MiT encoder), everything else uses the ConvNeXt encoder
+        decoder = checkpoint["decoder"]
+        arch = f"SegFormer-{decoder.split('_')[1].upper()}" if decoder.startswith("segformer_") else f"ConvNeXt-{decoder}"
+        predictors[f"{arch}({checkpoint['init']}, s{checkpoint['args']['seed']})"] = (
             lambda p=path: convnext_predictor(p, device, seg_model))
     predictors["YOLO26-seg"] = lambda: yolo_predictor(args.yolo, device)
 

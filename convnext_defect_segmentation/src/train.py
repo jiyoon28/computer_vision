@@ -112,7 +112,9 @@ def main():
     amp_dtype = torch.bfloat16 if device.type == "cuda" and torch.cuda.is_bf16_supported() else None
     print(f"Using device: {device}, AMP: {amp_dtype}")
 
-    run_name = f"convnext_{args.decoder}_{args.init}_seed{args.seed}"
+    # SegFormer 전체 모델은 ConvNeXt를 쓰지 않으므로 이름에 convnext_를 붙이지 않음
+    prefix = "" if args.decoder.startswith("segformer_") else "convnext_"
+    run_name = f"{prefix}{args.decoder}_{args.init}_seed{args.seed}"
     cfg.MODEL_DIR.mkdir(parents=True, exist_ok=True)
     cfg.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -158,7 +160,7 @@ def main():
                 "model_state_dict": model.state_dict(),
                 "decoder": args.decoder,
                 "init": args.init,
-                "model_name": cfg.DEFAULT_MODEL_NAME,
+                "model_name": model.model_name,  # ConvNeXt(timm 이름) 또는 SegFormer(Hugging Face 이름)
                 "class_names": cfg.CLASS_NAMES,
                 "image_size": cfg.IMAGE_SIZE,
                 "dataset": str(cfg.DATASET_DIR),
