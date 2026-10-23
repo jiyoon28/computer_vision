@@ -1,19 +1,22 @@
-"""ConvNeXt(분류)와 YOLO(segmentation)의 양/불 판정을 네 칸으로 나눠 실제 불량 비율을 본다.
+"""ConvNeXt(분류)와 segmentation 모델의 양/불 판정을 네 칸으로 나눠 실제 불량 비율을 본다.
 
 칸: (분류 양, seg 양) / (분류 불, seg 불) / (분류 불, seg 양) / (분류 양, seg 불)
 각 칸의 실제 불량 비율을 보고 "바로 불량 / 바로 양품 / 재검수" 규칙을 정한다.
 두 모델 모두 data/processed/segmentation/splits 분할로 학습된 체크포인트를 써야 한다.
+seg 모델: YOLO26(.pt, 기본값) 또는 ConvNeXt segmentation(.pth, convnext_defect_segmentation)
 """
 
 # 현재 Anaconda 환경의 OpenMP 초기화 충돌을 피하도록 NumPy를 먼저 로드.
 import numpy as np
 import argparse
 import csv
+import importlib.util
 import json
 import sys
 from pathlib import Path
 
 import torch
+import torchvision.transforms.functional as TF
 from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -49,7 +52,8 @@ def parse_args():
     parser.add_argument("--split", default="val", choices=["val", "test"],
                         help="규칙은 val로 정하고, test는 확인용으로만 쓴다")
     parser.add_argument("--convnext-weights", type=Path, default=DEFAULT_CONVNEXT)
-    parser.add_argument("--yolo-weights", type=Path, default=DEFAULT_YOLO)
+    parser.add_argument("--seg-weights", type=Path, default=DEFAULT_YOLO,
+                        help=".pt = YOLO26, .pth = ConvNeXt segmentation")
     parser.add_argument("--min-area", type=int, default=1,
                         help="seg 불량으로 볼 최소 결함 픽셀 수 (384x384 기준)")
     parser.add_argument("--ng-ratio", type=float, default=0.8,
@@ -76,6 +80,30 @@ def yolo_image_size():
     return metadata["dataset"]["image_size"]
 
 
+def load_segmenter(weights, device):
+    """(mask 예측 함수, 입력 크기)를 반환. 두 모델 모두 convert_sample로 만든 384 RGB 이미지를 받는다."""
+    if Path(weights).suffix == ".pt":
+        model = load_model(weights)
+        size = yolo_image_size()
+        return (lambda image: predict_mask(model, image, size, None if device.type == "cuda" else "cpu")), size
+
+    # ConvNeXt seg의 model.py는 분류 쪽 model.py와 이름이 같아서 경로로 따로 불러온다
+    path = REPO_ROOT / "convnext_defect_segmentation" / "src" / "model.py"
+    spec = importlib.util.spec_from_file_location("convnext_seg_model", path)
+    seg_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seg_module)
+    checkpoint = torch.load(weights, map_location="cpu", weights_only=False)
+    model = seg_module.model_from_checkpoint(checkpoint).to(device).eval()
+
+    @torch.no_grad()
+    def predict(image):
+        # 정규화는 모델 안에서 하므로 0~1 tensor만 넘긴다
+        logits = model(TF.to_tensor(image).unsqueeze(0).to(device))
+        return logits.argmax(dim=1)[0].cpu().numpy().astype(np.uint8)
+
+    return predict, checkpoint["image_size"]
+
+
 def decide(ratio, ng_ratio, ok_ratio):
     if ratio >= ng_ratio:
         return "불량"
@@ -93,9 +121,8 @@ def main():
 
     cls_model, cls_transform, class_names = load_convnext(args.convnext_weights, device)
     normal_id = class_names.index(NORMAL_CLASS)
-    seg_model = load_model(args.yolo_weights)
-    seg_size = yolo_image_size()
-    print(f"Split: {args.split} ({len(rows)} images), YOLO size: {seg_size}, device: {device}")
+    seg_predict, seg_size = load_segmenter(args.seg_weights, device)
+    print(f"Split: {args.split} ({len(rows)} images), seg: {args.seg_weights.name} ({seg_size}), device: {device}")
 
     records = []
     for index, row in enumerate(rows, start=1):
@@ -106,9 +133,9 @@ def main():
             probs = cls_model(x).softmax(dim=1)[0].cpu().numpy()
         cls_pred = int(probs.argmax())
 
-        # YOLO: 학습 데이터를 만들 때와 같은 변환 (grayscale -> resize -> RGB)
+        # seg: 학습 데이터를 만들 때와 같은 변환 (grayscale -> resize -> RGB)
         image, _ = convert_sample(row, seg_size)
-        mask = predict_mask(seg_model, image, seg_size, args.device)
+        mask = seg_predict(image)
         area = int((mask > 0).sum())
 
         records.append({
@@ -139,13 +166,16 @@ def main():
                         "defect_types": sorted({r["defect_type"] for r in cell if r["gt_defect"]})})
 
     output_dir = OUTPUT_DIR / args.split
+    if args.seg_weights.suffix == ".pth":
+        # YOLO 결과(기존 파일)를 덮어쓰지 않도록 모델 이름으로 하위 폴더
+        output_dir = output_dir / args.seg_weights.stem
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / "per_image.csv").open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=records[0].keys())
         writer.writeheader()
         writer.writerows(records)
     report = {"split": args.split, "convnext_weights": str(args.convnext_weights),
-              "yolo_weights": str(args.yolo_weights), "min_area": args.min_area,
+              "seg_weights": str(args.seg_weights), "min_area": args.min_area,
               "ng_ratio": args.ng_ratio, "ok_ratio": args.ok_ratio, "cells": summary}
     (output_dir / "four_cell.json").write_text(
         json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
