@@ -47,12 +47,12 @@ class ConvNeXtEncoder(nn.Module):
         self.channels = [info["num_chs"] for info in backbone.feature_info] # 각 stage의 channel 수를 저장함 tiny면 대략 [96,192,384,768]
 
     def forward(self, x):
-        features = [] # 각 stage feature를 저장할 리스트
+        features = [] # 각 stage feature를 저장할 리스트 => 최종적으로 [s4, s8, s16, s32]
         x = self.stem(x) # 입력을 stem에 통과
         for stage in self.stages:
             x = stage(x)
             features.append(x)
-        return features
+        return features # 이 feature 4개를 decoder에 넘김
 
 
 # ============================================================
@@ -61,6 +61,7 @@ class ConvNeXtEncoder(nn.Module):
 
 class DoubleConv(nn.Sequential):
     # 기존 UNet(unet_defect_segmentation)의 DoubleConv와 같은 구성
+    # 첫 번째 Conv에서 channel을 변경하고, 두 번째 Conv에서 그대로 유지함
     def __init__(self, in_channels, out_channels):
         super().__init__(conv_bn_relu(in_channels, out_channels), conv_bn_relu(out_channels, out_channels))
 
@@ -78,12 +79,12 @@ class UNetDecoder(nn.Module):
 
     def __init__(self, encoder_channels, num_classes, channels=(256, 128, 64, 48, 32), full_res=True):
         super().__init__()
-        c0, c1, c2, c3 = encoder_channels
-        d16, d8, d4, d2, d1 = channels
+        c0, c1, c2, c3 = encoder_channels # convnext의 c0=1/4, c1=1/8, c2=1/16, c3=1/32 channel수
+        d16, d8, d4, d2, d1 = channels # decoder 각 단계에서 사용할 channel 수 
         self.full_res_enabled = full_res
-        self.dec16 = DoubleConv(c3 + c2, d16)
-        self.dec8 = DoubleConv(d16 + c1, d8)
-        self.dec4 = DoubleConv(d8 + c0, d4)
+        self.dec16 = DoubleConv(c3 + c2, d16) # 1/32 feature를 1/16으로 키운 뒤 encoder feature와 concatenate하니까 c3+c2 channel이 들어옴
+        self.dec8 = DoubleConv(d16 + c1, d8) # 1/16 decoder feature를 1/8로 키우고 s8과 concatenate
+        self.dec4 = DoubleConv(d8 + c0, d4) # 1/8 -> 1/4로 키우고 s4와 concatenate
         if full_res:
             self.full_res = DoubleConv(3, d1)                                # 1/1
             self.half_res = nn.Sequential(nn.MaxPool2d(2), DoubleConv(d1, d2))  # 1/2
@@ -92,17 +93,18 @@ class UNetDecoder(nn.Module):
         self.classifier = nn.Conv2d(d1 if full_res else d4, num_classes, 1)
 
     def forward(self, features, image):
-        s4, s8, s16, s32 = features
+        s4, s8, s16, s32 = features # convnext feature 받음
         x = self.dec16(torch.cat([upsample_like(s32, s16), s16], dim=1))
         x = self.dec8(torch.cat([upsample_like(x, s8), s8], dim=1))
         x = self.dec4(torch.cat([upsample_like(x, s4), s4], dim=1))
         if not self.full_res_enabled:
             return self.classifier(x)
-        f1 = self.full_res(image)
-        f2 = self.half_res(f1)
+        f1 = self.full_res(image) # 원본이미지 -> 1/1 shallow feature
+        f2 = self.half_res(f1) # 1/2 feature
+        # 1/4 -> 1/2 -> 1/1로 올라가면서 shallow feature 와 concatenate
         x = self.dec2(torch.cat([upsample_like(x, f2), f2], dim=1))
         x = self.dec1(torch.cat([upsample_like(x, f1), f1], dim=1))
-        return self.classifier(x)
+        return self.classifier(x) # 원본 해상도 logits 반환
 
 
 # ============================================================
@@ -118,14 +120,17 @@ class FPNDecoder(nn.Module):
 
     def __init__(self, encoder_channels, num_classes, pyramid_channels=256, segmentation_channels=128):
         super().__init__()
+        # 여러 ConvNeXt stage feature를 top-down 으로 합침
+        # 각 stage channel이 96, 192, 384, 768로 다르니까 1x1 Conv로 전부 256 channel로 통일함 => lateral projection
         self.lateral = nn.ModuleList(nn.Conv2d(c, pyramid_channels, 1) for c in encoder_channels)
         # level i(1/4 * 2^i)는 3x3 conv + 2배 업샘플을 i번 거쳐 1/4로 (1/4 level도 conv 1번)
-        self.heads = nn.ModuleList()
-        for level in range(len(encoder_channels)):
+        self.heads = nn.ModuleList() # 각 pyramid level을 1/4 해상도로 올리기 위한 block들을 저장
+        for level in range(len(encoder_channels)): # 4개 pyramid level 각각 처리
             blocks, in_channels = [], pyramid_channels
             for _ in range(max(level, 1)):
                 blocks.append(nn.Sequential(
                     nn.Conv2d(in_channels, segmentation_channels, 3, padding=1, bias=False),
+                    # GroupNorm은 batch size가 작을 때 BatchNorm보다 안정적인 경우가 있음
                     nn.GroupNorm(32, segmentation_channels),
                     nn.ReLU(inplace=True),
                 ))
@@ -135,40 +140,50 @@ class FPNDecoder(nn.Module):
 
     def forward(self, features, image):
         # top-down: 깊은 level을 키워 바로 위 level에 더함
+        # 각 ConvNeXt feature를 256 channel로 변환
         pyramid = [lateral(f) for lateral, f in zip(self.lateral, features)]
+        # 깊은 층부터 얕은 층 방향으로 이동
         for i in range(len(pyramid) - 2, -1, -1):
             pyramid[i] = pyramid[i] + F.interpolate(pyramid[i + 1], size=pyramid[i].shape[-2:], mode="nearest")
 
-        target = pyramid[0]
+        target = pyramid[0] # 목표 해상도를 가장 큰 1/4로 설정
         merged = 0
         for x, blocks in zip(pyramid, self.heads):
             for block in blocks:
                 x = block(x)
                 if x.shape[-2:] != target.shape[-2:]:
                     x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
-            merged = merged + x
-        return self.classifier(merged)
+            merged = merged + x # 각 pyramid feature를 1/4까지 키워서 전부 합침
+        return self.classifier(merged) # 최종적으로 1/4 segmentation logits반환
 
 
 # ============================================================
 # Decoder 3. UPerNet (Xiao et al. 2018). ConvNeXt 논문의 ADE20K 실험에서 쓴 decoder
 # ============================================================
 
+# UPerNet에 들어가는 모듈
+# PPM = Pyramid Pooling Module
+# 가장 깊은 feature에 여러 크기의 global context를 추가함
 class PPM(nn.Module):
     """가장 깊은 feature를 1x1, 2x2, 3x3, 6x6으로 평균 풀링해 전역 맥락을 붙인다 (PSPNet)."""
 
     def __init__(self, in_channels, channels, scales=(1, 2, 3, 6)):
         super().__init__()
         self.branches = nn.ModuleList(
+            # 입력 크기와 상관없이 지정된 크기로 pooling 
             nn.Sequential(nn.AdaptiveAvgPool2d(s), conv_bn_relu(in_channels, channels, 1)) for s in scales
         )
+        # 각 pooled feature channel을 줄이고 가공
         self.bottleneck = conv_bn_relu(in_channels + len(scales) * channels, channels)
 
     def forward(self, x):
+        # 각 scale pooled feature를 다시 원래 x크기로 확대
         pooled = [upsample_like(branch(x), x) for branch in self.branches]
+        # 원래 deep feature + 4개 context feature를 channel 방향으로 붙임
+        # bottleneck: 붙인 feature을 다시 압축/가공
         return self.bottleneck(torch.cat([x, *pooled], dim=1))
 
-
+# PPM + FPM + multi-scale concatenation
 class UPerNetDecoder(nn.Module):
     """PPM(1/32) + FPN top-down, 네 level을 1/4로 키워 이어붙인 뒤 분류.
 
@@ -179,20 +194,29 @@ class UPerNetDecoder(nn.Module):
 
     def __init__(self, encoder_channels, num_classes, channels=256, dropout=0.1):
         super().__init__()
-        self.ppm = PPM(encoder_channels[-1], channels)
+        # 가장 깊은 1/32 feature에 PPM 적용
+        self.ppm = PPM(encoder_channels[-1], channels) 
+        # 1/4, 1/8, 1/16  feature들을 256 channel로 통일
         self.lateral = nn.ModuleList(conv_bn_relu(c, channels, 1) for c in encoder_channels[:-1])
+        # 각 scale feature를 Conv로 정리
         self.fpn = nn.ModuleList(conv_bn_relu(channels, channels) for _ in encoder_channels[:-1])
+        # 4개  scale feature를 concatenate한뒤 하나로 합칠 convolution
         self.fuse = conv_bn_relu(len(encoder_channels) * channels, channels)
         self.dropout = nn.Dropout2d(dropout)  # 0.1: mmsegmentation 기본값
+        # 최종 segmentation head
         self.classifier = nn.Conv2d(channels, num_classes, 1)
 
     def forward(self, features, image):
+        # 얕은 3개 Convnext feature를 channel 통일
         laterals = [lateral(f) for lateral, f in zip(self.lateral, features[:-1])]
-        laterals.append(self.ppm(features[-1]))
+        laterals.append(self.ppm(features[-1])) # 가장 깊은 feature는 PPM을 통과시킴
+        # => 1/4, 1/8, 1/16, 1/32 + Global context를 얻음
         for i in range(len(laterals) - 2, -1, -1):
+            # FPN top-down fusion
             laterals[i] = laterals[i] + upsample_like(laterals[i + 1], laterals[i])
 
-        outs = [fpn(x) for fpn, x in zip(self.fpn, laterals[:-1])] + [laterals[-1]]
+        # 각 scale feature를 conv로 다시 정리
+        outs = [fpn(x) for fpn, x in zip(self.fpn, laterals[:-1])] + [laterals[-1]] # 모두 1/4 해상도로 통일
         outs = [outs[0]] + [upsample_like(x, outs[0]) for x in outs[1:]]
         return self.classifier(self.dropout(self.fuse(torch.cat(outs, dim=1))))
 
