@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DECODERS = ["unet", "fpn", "upernet"]
+DECODERS = ["unet", "unet4", "fpn", "upernet"]
 DEFAULT_MODEL_NAME = "convnextv2_tiny.fcmae_ft_in22k_in1k_384"
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -67,28 +67,35 @@ class UNetDecoder(nn.Module):
     ConvNeXt에는 1/2, 1/1 feature가 없어서 원본 이미지에서 얕은 conv 가지를 따로 뽑아 skip으로 쓴다.
     얇은 Crack처럼 몇 픽셀짜리 경계를 1/4에서 4배로 키우면 뭉개지기 쉬워서 넣은 것.
     채널 수(256/128/64/48/32)는 기존 UNet처럼 단계마다 절반씩 줄인 경험값.
+
+    full_res=False ("unet4"): 얕은 가지와 1/2, 1/1 단계를 빼고 1/4에서 분류한다 (SegModel이 4배로 키움).
+    UNet의 미세한 오탐이 얕은 가지 때문인지 확인하는 비교 실험용. 나머지 구조는 같다.
     """
 
-    def __init__(self, encoder_channels, num_classes, channels=(256, 128, 64, 48, 32)):
+    def __init__(self, encoder_channels, num_classes, channels=(256, 128, 64, 48, 32), full_res=True):
         super().__init__()
         c0, c1, c2, c3 = encoder_channels
         d16, d8, d4, d2, d1 = channels
-        self.full_res = DoubleConv(3, d1)                                # 1/1
-        self.half_res = nn.Sequential(nn.MaxPool2d(2), DoubleConv(d1, d2))  # 1/2
+        self.full_res_enabled = full_res
         self.dec16 = DoubleConv(c3 + c2, d16)
         self.dec8 = DoubleConv(d16 + c1, d8)
         self.dec4 = DoubleConv(d8 + c0, d4)
-        self.dec2 = DoubleConv(d4 + d2, d2)
-        self.dec1 = DoubleConv(d2 + d1, d1)
-        self.classifier = nn.Conv2d(d1, num_classes, 1)
+        if full_res:
+            self.full_res = DoubleConv(3, d1)                                # 1/1
+            self.half_res = nn.Sequential(nn.MaxPool2d(2), DoubleConv(d1, d2))  # 1/2
+            self.dec2 = DoubleConv(d4 + d2, d2)
+            self.dec1 = DoubleConv(d2 + d1, d1)
+        self.classifier = nn.Conv2d(d1 if full_res else d4, num_classes, 1)
 
     def forward(self, features, image):
         s4, s8, s16, s32 = features
-        f1 = self.full_res(image)
-        f2 = self.half_res(f1)
         x = self.dec16(torch.cat([upsample_like(s32, s16), s16], dim=1))
         x = self.dec8(torch.cat([upsample_like(x, s8), s8], dim=1))
         x = self.dec4(torch.cat([upsample_like(x, s4), s4], dim=1))
+        if not self.full_res_enabled:
+            return self.classifier(x)
+        f1 = self.full_res(image)
+        f2 = self.half_res(f1)
         x = self.dec2(torch.cat([upsample_like(x, f2), f2], dim=1))
         x = self.dec1(torch.cat([upsample_like(x, f1), f1], dim=1))
         return self.classifier(x)
@@ -186,7 +193,12 @@ class UPerNetDecoder(nn.Module):
         return self.classifier(self.dropout(self.fuse(torch.cat(outs, dim=1))))
 
 
-DECODER_CLASSES = {"unet": UNetDecoder, "fpn": FPNDecoder, "upernet": UPerNetDecoder}
+DECODER_CLASSES = {
+    "unet": UNetDecoder,
+    "unet4": lambda channels, num_classes: UNetDecoder(channels, num_classes, full_res=False),
+    "fpn": FPNDecoder,
+    "upernet": UPerNetDecoder,
+}
 
 
 class SegModel(nn.Module):

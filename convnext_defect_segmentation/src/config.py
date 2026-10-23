@@ -19,7 +19,8 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs"
 CLASS_NAMES = ["Background", "Blowhole", "Break", "Crack", "Fray", "Uneven"]
 NUM_CLASSES = len(CLASS_NAMES)
 
-DECODERS = ["unet", "fpn", "upernet"]
+# unet4: 얕은 가지 없이 1/4에서 멈춘 UNet (비교 실험용)
+DECODERS = ["unet", "unet4", "fpn", "upernet"]
 DEFAULT_MODEL_NAME = "convnextv2_tiny.fcmae_ft_in22k_in1k_384"
 # --init clf: 결함 분류로 fine-tune한 ConvNeXt의 stem/stages를 encoder 초기값으로 사용
 CLF_CHECKPOINT = (REPO_ROOT / "convnext_defect_classification/models"
