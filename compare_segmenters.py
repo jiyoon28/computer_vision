@@ -144,7 +144,9 @@ def main():
         # seed in the name so runs that differ only by seed do not overwrite each other
         # "segformer_b2" etc. = full SegFormer (MiT encoder), everything else uses the ConvNeXt encoder
         decoder = checkpoint["decoder"]
-        arch = f"SegFormer-{decoder.split('_')[1].upper()}" if decoder.startswith("segformer_") else f"ConvNeXt-{decoder}"
+        # timm 이름이 convnext_로 시작하면 V1. V2와 같은 decoder/seed여도 이름이 겹치지 않게 -V1을 붙임
+        v1 = "-V1" if checkpoint["model_name"].startswith("convnext_") else ""
+        arch = f"SegFormer-{decoder.split('_')[1].upper()}" if decoder.startswith("segformer_") else f"ConvNeXt{v1}-{decoder}"
         predictors[f"{arch}({checkpoint['init']}, s{checkpoint['args']['seed']})"] = (
             lambda p=path: convnext_predictor(p, device, seg_model))
     predictors["YOLO26-seg"] = lambda: yolo_predictor(args.yolo, device)

@@ -29,6 +29,8 @@ from metrics import compute_metrics, update_confusion_matrix  # noqa: E402
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decoder", required=True, choices=cfg.DECODERS)
+    # 기본은 ConvNeXt V2. 상업용 가능한 V1(convnext_tiny.fb_in22k_ft_in1k_384 등)과 비교할 때 바꿈
+    parser.add_argument("--model-name", default=cfg.DEFAULT_MODEL_NAME)
     # imagenet: timm 사전학습 가중치 / clf: 결함 분류로 fine-tune한 ConvNeXt
     parser.add_argument("--init", default="imagenet", choices=["imagenet", "clf"])
     # 100 / 15: YOLO(150 epoch)와 UNet(40 epoch) 사이로 잡은 경험값
@@ -113,7 +115,9 @@ def main():
     print(f"Using device: {device}, AMP: {amp_dtype}")
 
     # SegFormer 전체 모델은 ConvNeXt를 쓰지 않으므로 이름에 convnext_를 붙이지 않음
-    prefix = "" if args.decoder.startswith("segformer_") else "convnext_"
+    # timm 이름이 convnextv2_로 시작하면 V2, convnext_로 시작하면 V1. 기존 V2 체크포인트 이름은 그대로 둠
+    version = "convnextv1_" if args.model_name.startswith("convnext_") else "convnext_"
+    prefix = "" if args.decoder.startswith("segformer_") else version
     run_name = f"{prefix}{args.decoder}_{args.init}_seed{args.seed}"
     cfg.MODEL_DIR.mkdir(parents=True, exist_ok=True)
     cfg.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -128,7 +132,7 @@ def main():
     print(f"Train: {len(train_set)}  Val: {len(val_set)}")
 
     model = create_model(
-        args.decoder, cfg.NUM_CLASSES, cfg.DEFAULT_MODEL_NAME,
+        args.decoder, cfg.NUM_CLASSES, args.model_name,
         init_checkpoint=cfg.CLF_CHECKPOINT if args.init == "clf" else None,
     ).to(device)
     print(f"Decoder params: {sum(p.numel() for p in model.decoder.parameters()) / 1e6:.2f}M  "
